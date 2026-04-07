@@ -1,0 +1,704 @@
+{
+  "name": "website down",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "604a6c8d-dc56-4ce1-94cf-6f8503396b21",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [
+        10448,
+        3088
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "72b729c6-e0af-46f0-955f-c649e9d397bc",
+              "name": "Website1",
+              "type": "string",
+              "value": "https://recruitnepal.com/"
+            },
+            {
+              "id": "dfe8dd8f-ebc6-4e12-886c-192e673c15cf",
+              "name": "Website2",
+              "type": "string",
+              "value": "https://internepal.com.np/"
+            },
+            {
+              "id": "25457f32-6440-404d-8e99-eb772e552982",
+              "name": "wait_secs",
+              "type": "number",
+              "value": 30
+            },
+            {
+              "id": "5ea1be97-40ce-4696-9454-ecb17127e674",
+              "name": "alert_email",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a1b2c3d4-0001-0001-0001-a1b2c3d40001",
+              "name": "slow_threshold_ms",
+              "type": "number",
+              "value": 3000
+            },
+            {
+              "id": "a1b2c3d4-0001-0001-0001-a1b2c3d40002",
+              "name": "max_redirects",
+              "type": "number",
+              "value": 5
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "178ad07a-64e8-4814-8c84-efecc186fc34",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        10672,
+        3088
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst slowThreshold = item.slow_threshold_ms || 3000;\nconst maxRedirects = item.max_redirects || 5;\n\nconst rawUrls = Object.entries(item)\n  .filter(([key]) => key.toLowerCase().startsWith('website'))\n  .map(([key, val]) => ({ key, url: String(val || '').trim() }))\n  .filter(({ url }) => url.length > 0);\n\nconst validUrls = [];\nconst skippedUrls = [];\n\nfor (const { key, url } of rawUrls) {\n  if (/^https?:\\/\\/.+/.test(url)) {\n    validUrls.push(url);\n  } else {\n    skippedUrls.push({ key, url, reason: 'Missing http:// or https://' });\n  }\n}\n\nconst seen = new Set();\nconst uniqueUrls = validUrls.filter(url => {\n  const normalized = url.toLowerCase().replace(/\\/+$/, '');\n  if (seen.has(normalized)) return false;\n  seen.add(normalized);\n  return true;\n});\n\nif (uniqueUrls.length === 0) {\n  throw new Error(\n    'No valid URLs found in Config. Add at least one Website field with a valid http:// or https:// URL. Skipped: ' + JSON.stringify(skippedUrls)\n  );\n}\n\nreturn uniqueUrls.map(url => ({\n  json: {\n    Websites: url,\n    wait_secs: item.wait_secs || 30,\n    alert_email: item.alert_email,\n    slow_threshold_ms: slowThreshold,\n    max_redirects: maxRedirects,\n    skipped_urls: skippedUrls,\n    total_sites_monitored: uniqueUrls.length\n  }\n}));"
+      },
+      "id": "4a24fd86-9479-4d95-82d4-5c80af73b0a7",
+      "name": "Collect Websites",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        10896,
+        3088
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.Websites }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": "={{ $json.max_redirects }}"
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "f8b33d47-8de5-42bf-8878-4849c0d5b06a",
+      "name": "HTTP Test 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        11120,
+        3088
+      ],
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "calc1-001",
+              "name": "website",
+              "type": "string",
+              "value": "={{ $('Collect Websites').item.json.Websites }}"
+            },
+            {
+              "id": "calc1-002",
+              "name": "IS_UP",
+              "type": "boolean",
+              "value": "={{ typeof $json.statusCode === 'number' && $json.statusCode > 0 && $json.statusCode < 400 }}"
+            },
+            {
+              "id": "calc1-003",
+              "name": "checked_at",
+              "type": "string",
+              "value": "={{ $json.headers?.date ?? $now.toISO() }}"
+            },
+            {
+              "id": "calc1-004",
+              "name": "status_code",
+              "type": "number",
+              "value": "={{ $json.statusCode ?? 0 }}"
+            },
+            {
+              "id": "calc1-005",
+              "name": "wait_secs",
+              "type": "number",
+              "value": "={{ $('Collect Websites').item.json.wait_secs }}"
+            },
+            {
+              "id": "calc1-006",
+              "name": "alert_email",
+              "type": "string",
+              "value": "={{ $('Collect Websites').item.json.alert_email }}"
+            },
+            {
+              "id": "calc1-007",
+              "name": "slow_threshold_ms",
+              "type": "number",
+              "value": "={{ $('Collect Websites').item.json.slow_threshold_ms }}"
+            },
+            {
+              "id": "calc1-008",
+              "name": "max_redirects",
+              "type": "number",
+              "value": "={{ $('Collect Websites').item.json.max_redirects }}"
+            },
+            {
+              "id": "calc1-009",
+              "name": "response_time_ms",
+              "type": "number",
+              "value": "={{ $json.headers && $json.headers['x-response-time'] ? parseInt($json.headers['x-response-time']) : -1 }}"
+            },
+            {
+              "id": "calc1-010",
+              "name": "status_category",
+              "type": "string",
+              "value": "={{ (function() { var c = $json.statusCode || 0; if (c === 0) return 'NETWORK_ERROR'; if (c < 300) return 'OK'; if (c < 400) return 'REDIRECT'; if (c < 500) return 'CLIENT_ERROR'; return 'SERVER_ERROR'; })() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f52f4850-8640-4c3b-8186-8c402f7aac15",
+      "name": "Calculate Status 1",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        11344,
+        3088
+      ],
+      "typeVersion": 3.3
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 1,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "router1-up",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.IS_UP }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "UP - Wait and Recheck"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 1,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "router1-down",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.IS_UP }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "DOWN - Wait and Recheck"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b6bedc57-92e5-43a5-95ff-eeb8b9cc8316",
+      "name": "Status Router 1",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        10400,
+        3680
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.wait_secs }}"
+      },
+      "id": "b854e3c4-5c1c-4616-909a-8da98e062622",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        10624,
+        3680
+      ],
+      "typeVersion": 1.1,
+      "webhookId": "5eb7dc48-c27e-4944-90e1-eff744cad743"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": "={{ $json.max_redirects ?? 5 }}"
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "6468d4ff-cc47-420d-95d2-1ae615b2e500",
+      "name": "HTTP Test 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        10848,
+        3680
+      ],
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "calc2-001",
+              "name": "website",
+              "type": "string",
+              "value": "={{ $('Status Router 1').item.json.website }}"
+            },
+            {
+              "id": "calc2-002",
+              "name": "IS_UP",
+              "type": "boolean",
+              "value": "={{ typeof $json.statusCode === 'number' && $json.statusCode > 0 && $json.statusCode < 400 }}"
+            },
+            {
+              "id": "calc2-003",
+              "name": "checked_at",
+              "type": "string",
+              "value": "={{ $json.headers?.date ?? $now.toISO() }}"
+            },
+            {
+              "id": "calc2-004",
+              "name": "status_code",
+              "type": "number",
+              "value": "={{ $json.statusCode ?? 0 }}"
+            },
+            {
+              "id": "calc2-005",
+              "name": "alert_email",
+              "type": "string",
+              "value": "={{ $('Status Router 1').item.json.alert_email }}"
+            },
+            {
+              "id": "calc2-006",
+              "name": "slow_threshold_ms",
+              "type": "number",
+              "value": "={{ $('Status Router 1').item.json.slow_threshold_ms }}"
+            },
+            {
+              "id": "calc2-007",
+              "name": "max_redirects",
+              "type": "number",
+              "value": "={{ $('Status Router 1').item.json.max_redirects ?? 5 }}"
+            },
+            {
+              "id": "calc2-008",
+              "name": "response_time_ms",
+              "type": "number",
+              "value": "={{ $json.headers && $json.headers['x-response-time'] ? parseInt($json.headers['x-response-time']) : -1 }}"
+            },
+            {
+              "id": "calc2-009",
+              "name": "is_slow",
+              "type": "boolean",
+              "value": "={{ (function() { var rt = $json.headers && $json.headers['x-response-time'] ? parseInt($json.headers['x-response-time']) : -1; var threshold = $('Status Router 1').item.json.slow_threshold_ms || 3000; return rt > 0 && rt > threshold; })() }}"
+            },
+            {
+              "id": "calc2-010",
+              "name": "status_category",
+              "type": "string",
+              "value": "={{ (function() { var c = $json.statusCode || 0; if (c === 0) return 'NETWORK_ERROR'; if (c < 300) return 'OK'; if (c < 400) return 'REDIRECT'; if (c < 500) return 'CLIENT_ERROR'; return 'SERVER_ERROR'; })() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eeb5ccd0-f535-4328-b907-0418a98fddfa",
+      "name": "Calculate Status 2",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        11072,
+        3680
+      ],
+      "typeVersion": 3.3
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 1,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "router2-up",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.IS_UP }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "UP - No Action"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 1,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "router2-down",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.IS_UP }}",
+                    "rightValue": ""
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "DOWN - Send Alert"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "af6348ba-6b17-4c9c-9bf2-95881ed46f18",
+      "name": "Status Router 2",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        11280,
+        3680
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.alert_email }}",
+        "subject": "=🚨 [{{ $json.status_category }}] Down: {{ $json.website }}",
+        "message": "=<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />\n  <title>Website Down Notification</title>\n</head>\n<body style=\"margin:0;padding:0;background:#f2f4f6;font-family:Arial,Helvetica,sans-serif;\">\n  <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;margin:24px auto;background:#ffffff;border-radius:6px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.08);\">\n    <tr>\n      <td style=\"padding:18px 20px;background:#d63031;color:#ffffff;text-align:center;\">\n        <h1 style=\"margin:0;font-size:20px;\">Website Offline Alert</h1>\n        <p style=\"margin:6px 0 0;font-size:13px;opacity:0.85;\">Two consecutive checks failed — action required</p>\n      </td>\n    </tr>\n    <tr>\n      <td style=\"padding:20px;\">\n        <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:0 0 16px 0;\">\n          <tr>\n            <td style=\"padding:14px;background:#fff5f5;border:1px solid #ffc9c9;border-radius:6px;font-size:14px;color:#333;line-height:1.8;\">\n              <strong>Website:</strong> {{ $json.website }}<br>\n              <strong>Status code:</strong> {{ $json.status_code === 0 ? '0 - Unreachable (DNS / timeout / network error)' : $json.status_code }}<br>\n              <strong>Category:</strong> {{ $json.status_category }}<br>\n              <strong>Detected at:</strong> {{ $json.checked_at }}<br>\n              <strong>Response time:</strong> {{ $json.response_time_ms > 0 ? $json.response_time_ms + ' ms' : 'N/A (no response)' }}<br>\n              <strong>Confirmation:</strong> Failed 2 of 2 checks\n            </td>\n          </tr>\n        </table>\n        <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:0 0 16px 0;\">\n          <tr>\n            <td style=\"padding:12px 14px;background:#fffbea;border:1px solid #ffe58f;border-radius:6px;font-size:13px;color:#555;\">\n              <strong>Status category guide:</strong><br>\n              OK — 2xx: normal success<br>\n              REDIRECT — 3xx: redirect loop or misconfiguration<br>\n              CLIENT_ERROR — 4xx: bad request or auth issue<br>\n              SERVER_ERROR — 5xx: server crash or overload<br>\n              NETWORK_ERROR — 0: DNS failure, timeout, or unreachable host\n            </td>\n          </tr>\n        </table>\n        <p style=\"margin:0 0 12px 0;color:#333333;font-size:15px;line-height:1.5;\">Suggested first steps:</p>\n        <ul style=\"margin:0 0 16px 0;padding-left:20px;color:#333;font-size:14px;line-height:1.8;\">\n          <li>Check if your hosting provider is reporting an outage</li>\n          <li>Try opening the URL from a different network or device</li>\n          <li>Review recent deployments or config changes</li>\n          <li>Check server logs and disk/memory usage</li>\n        </ul>\n        <p style=\"margin:0 0 6px 0;color:#777;font-size:13px;\">Alert sent to: <strong>{{ $json.alert_email }}</strong></p>\n      </td>\n    </tr>\n    <tr>\n      <td style=\"padding:12px 20px;background:#fafbfc;color:#99a1ab;font-size:12px;text-align:center;\">Automated uptime monitor — do not reply to this email.</td>\n    </tr>\n  </table>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        11504,
+        3680
+      ],
+      "id": "b221468f-9098-4df8-8632-d16dfe7ccf0c",
+      "name": "Send Alert Email",
+      "webhookId": "074e5b9b-0765-496d-9c86-ecd03184b80c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Ux5XAuNZg3r0wucs",
+          "name": "automation INRN Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## CONFIG\nThe **only node you ever need to edit.**\n\n**Add a site:** Add a new field → Website4, Website5...\n**Remove a site:** Delete that field\n**Change email:** Edit alert_email\n**Change wait time:** Edit wait_secs (seconds)\n**Slow warning threshold:** Edit slow_threshold_ms (ms)\n**Max redirects:** Edit max_redirects\n\nField rules:\n- Must start with 'Website' (any case)\n- Duplicates auto-removed\n- Invalid URLs auto-skipped",
+        "height": 536,
+        "width": 396
+      },
+      "id": "69b76c6e-190d-4bd4-a5c6-b9a6ee4f49cf",
+      "name": "Note - Config",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        10400,
+        2736
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## COLLECT & VALIDATE\nAuto-discovers all Website* fields.\n\nChecks:\n✓ Must start with http:// or https://\n✓ Duplicates removed\n✓ Empty values skipped\n✓ Throws error if 0 valid URLs\n\nOutputs one item per valid URL.\nNever needs editing.",
+        "height": 476,
+        "width": 248
+      },
+      "id": "ed691874-f454-4af6-8cf6-9f894278389c",
+      "name": "Note - Collect",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        10832,
+        2768
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## HTTP CHECK 1\nFirst attempt to reach each URL.\n\n- Timeout: 15s\n- Full response captured\n- neverError ON: 4xx/5xx pass through\n- Error output ON: network failures pass through\n- Both outputs go to Calculate Status 1",
+        "height": 460,
+        "width": 392
+      },
+      "id": "3718d34f-9c36-466f-8a73-b0d9eb14cfec",
+      "name": "Note - HTTP1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        11104,
+        2816
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## STATUS ROUTER 1\nBoth UP and DOWN go to Wait.\n\nThis is intentional — we always confirm with a second check regardless of the first result.\n\nPrevents false alerts from transient blips.",
+        "height": 536,
+        "width": 376
+      },
+      "id": "713c9f40-f471-41a1-9706-9384595388ad",
+      "name": "Note - Router1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        10368,
+        3328
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## STATUS ROUTER 2\nFinal verdict.\n\nUP - No Action:\nSite recovered. Execution ends. No email.\n\nDOWN - Send Alert:\nFailed both checks. Email fires with full details.\n\nUP branch is intentionally unconnected.",
+        "height": 492,
+        "width": 440
+      },
+      "id": "4e5d96cb-bd7c-43de-80c1-5246c8daf3e3",
+      "name": "Note - Router2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        10768,
+        3360
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## SEND ALERT EMAIL\nFires only when a site fails BOTH checks.\nOne email per down site.\n\nEmail includes:\n- URL + clickable link\n- Status code + plain English\n- Status category\n- Timestamp\n- Response time\n- Status category legend\n- Investigation checklist\n\nRecipient = alert_email from Config.",
+        "height": 532,
+        "width": 402
+      },
+      "id": "76309afe-2c59-4864-919d-ea2499e7f9ff",
+      "name": "Note - Email",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        11232,
+        3328
+      ],
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Collect Websites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Websites": {
+      "main": [
+        [
+          {
+            "node": "HTTP Test 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Test 1": {
+      "main": [
+        [
+          {
+            "node": "Calculate Status 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calculate Status 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Status 1": {
+      "main": [
+        [
+          {
+            "node": "Status Router 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Router 1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Test 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Test 2": {
+      "main": [
+        [
+          {
+            "node": "Calculate Status 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calculate Status 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Status 2": {
+      "main": [
+        [
+          {
+            "node": "Status Router 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Router 2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "3579cd1f-c77e-4264-a76a-fb780c1aff1b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8a925e89005df3311e574d607d5c6949926f3d7930a998f36d5648d219219f2c"
+  },
+  "id": "L9j_nLYpTfHLEUBFkh1MD",
+  "tags": []
+}
